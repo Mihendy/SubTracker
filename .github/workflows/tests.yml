@@ -1,0 +1,40 @@
+# Юнит-тесты на каждый push (в любую ветку) и на pull request в master
+name: Tests
+
+on:
+  push:
+  pull_request:
+    branches: [ master ]
+
+# Новый push в ту же ветку отменяет ещё не завершённый прогон
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # JDK 25 — как в gradle/gradle-daemon-jvm.properties
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Кэш зависимостей Gradle между прогонами
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Run unit tests
+        run: ./gradlew test
+
+      # Отчёт о тестах можно скачать со страницы прогона, если что-то упало
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: app/build/reports/tests/
