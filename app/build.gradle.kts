@@ -33,6 +33,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG нужен, чтобы включать логи только в debug-сборке
+        buildConfig = true
     }
 }
 
@@ -45,9 +47,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.core.splashscreen)
+    implementation(libs.timber)
     testImplementation(libs.junit)
     // Настоящая org.json для юнит-тестов: в android.jar JSONObject — заглушка
-    testImplementation("org.json:json:20240303")
+    testImplementation(libs.org.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
