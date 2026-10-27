@@ -3,6 +3,7 @@ package ru.mihendy.subtracker.data
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONException
+import timber.log.Timber
 import java.io.File
 import java.io.IOException
 import java.time.LocalDate
@@ -24,12 +25,14 @@ import java.time.LocalDate
  *   - повторяющиеся `uid` в файле — остаётся последняя запись (как при [add]);
  *   - после чтения вызывается [purgeExpired], удалённые просроченные подписки
  *     битыми не считаются;
- * - [save] ошибки записи (нет места, нет прав) не глотает — бросает [IOException].
+ * - [save] при ошибке записи (нет места, нет прав) не бросает исключение,
+ *   а логирует его и возвращает `false`.
+ *
+ * Все действия логируются через Timber (в тестах деревьев нет — логи никуда не идут).
  */
 class SubscriptionStorage(private val file: File) {
 
     /** Хранилище в стандартном файле `filesDir/subscriptions.json` приложения. */
-    @Suppress("unused") // будет использоваться UI-слоем в следующих заданиях
     constructor(context: Context) : this(File(context.filesDir, FILE_NAME))
 
     private val _items = mutableListOf<Subscription>()
@@ -40,16 +43,37 @@ class SubscriptionStorage(private val file: File) {
 
     /** Добавляет подписку; если подписка с таким `uid` уже есть — заменяет её. */
     fun add(item: Subscription) {
-        val index = _items.indexOfFirst { it.uid == item.uid }
-        if (index >= 0) {
-            _items[index] = item
+        if (put(item)) {
+            Timber.d("Подписка обновлена: %s (uid=%s)", item.name, item.uid)
         } else {
-            _items.add(item)
+            Timber.d("Подписка добавлена: %s (uid=%s)", item.name, item.uid)
         }
     }
 
+    /**
+     * Кладёт подписку в список без логирования (нужно [load], чтобы не писать
+     * в лог каждую прочитанную запись). Возвращает `true`, если заменили существующую.
+     */
+    private fun put(item: Subscription): Boolean {
+        val index = _items.indexOfFirst { it.uid == item.uid }
+        if (index >= 0) {
+            _items[index] = item
+            return true
+        }
+        _items.add(item)
+        return false
+    }
+
     /** Удаляет подписку по [uid]. Возвращает `false`, если такой подписки нет. */
-    fun remove(uid: String): Boolean = _items.removeAll { it.uid == uid }
+    fun remove(uid: String): Boolean {
+        val removed = _items.removeAll { it.uid == uid }
+        if (removed) {
+            Timber.d("Подписка удалена: uid=%s", uid)
+        } else {
+            Timber.w("Удаление: подписки с uid=%s нет", uid)
+        }
+        return removed
+    }
 
     /**
      * Удаляет подписки, у которых [Subscription.endDate] уже прошла (строго раньше [today]).
@@ -58,15 +82,29 @@ class SubscriptionStorage(private val file: File) {
     fun purgeExpired(today: LocalDate = LocalDate.now()): Int {
         val before = _items.size
         _items.removeAll { item -> item.endDate?.isBefore(today) ?: false }
-        return before - _items.size
+        val purged = before - _items.size
+        if (purged > 0) Timber.i("Удалено просроченных подписок: %d", purged)
+        return purged
     }
 
-    /** Записывает все подписки в файл JSON-массивом. */
-    fun save() {
+    /**
+     * Записывает все подписки в файл JSON-массивом.
+     *
+     * @return `true`, если файл записан; `false`, если запись не удалась
+     *   (ошибка уже залогирована, данные в памяти не теряются).
+     */
+    fun save(): Boolean {
         val array = JSONArray()
         _items.forEach { array.put(it.json) }
-        file.parentFile?.mkdirs()
-        file.writeText(array.toString())
+        return try {
+            file.parentFile?.mkdirs()
+            file.writeText(array.toString())
+            Timber.i("Сохранено подписок: %d в %s", _items.size, file.path)
+            true
+        } catch (e: IOException) {
+            Timber.e(e, "Не удалось записать %d подписок в %s", _items.size, file.path)
+            false
+        }
     }
 
     /**
@@ -77,22 +115,29 @@ class SubscriptionStorage(private val file: File) {
      */
     fun load(today: LocalDate = LocalDate.now()): Int {
         _items.clear()
-        if (!file.exists()) return 0
+        if (!file.exists()) {
+            Timber.i("Файла %s нет — начинаем с пустого списка", file.path)
+            return 0
+        }
 
         val array = try {
             JSONArray(file.readText())
         } catch (e: IOException) {
+            Timber.e(e, "Не удалось прочитать %s", file.path)
             return 0
         } catch (e: JSONException) {
+            Timber.e(e, "В %s не JSON-массив", file.path)
             return 0
         }
 
         var skipped = 0
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i)?.let { Subscription.parse(it) }
-            if (item != null) add(item) else skipped++
+            if (item != null) put(item) else skipped++
         }
+        if (skipped > 0) Timber.w("Пропущено битых записей: %d", skipped)
         purgeExpired(today)
+        Timber.i("Загружено подписок: %d из %s", _items.size, file.path)
         return skipped
     }
 

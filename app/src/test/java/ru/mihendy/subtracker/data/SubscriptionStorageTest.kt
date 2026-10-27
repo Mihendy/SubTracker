@@ -34,11 +34,23 @@ class SubscriptionStorageTest {
         val b = sub("B").copy(importance = Importance.OPTIONAL, color = 0xFF00FF00.toInt())
         storage.add(a)
         storage.add(b)
-        storage.save()
+        assertTrue(storage.save())
 
         val loaded = SubscriptionStorage(file())
         assertEquals(0, loaded.load(today))
         assertEquals(listOf(a, b), loaded.items)
+    }
+
+    @Test
+    fun save_writeError_returnsFalseAndKeepsItems() {
+        // На месте файла лежит папка — writeText бросит IOException
+        val dir = tmp.newFolder("subscriptions.json")
+        val storage = SubscriptionStorage(dir)
+        val a = sub("A")
+        storage.add(a)
+
+        assertFalse(storage.save())
+        assertEquals(listOf(a), storage.items)
     }
 
     @Test
