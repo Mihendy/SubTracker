@@ -25,7 +25,8 @@ import java.time.LocalDate
  *   - повторяющиеся `uid` в файле — остаётся последняя запись (как при [add]);
  *   - после чтения вызывается [purgeExpired], удалённые просроченные подписки
  *     битыми не считаются;
- * - [save] ошибки записи (нет места, нет прав) не глотает — бросает [IOException].
+ * - [save] при ошибке записи (нет места, нет прав) не бросает исключение,
+ *   а логирует его и возвращает `false`.
  *
  * Все действия логируются через Timber (в тестах деревьев нет — логи никуда не идут).
  */
@@ -86,13 +87,24 @@ class SubscriptionStorage(private val file: File) {
         return purged
     }
 
-    /** Записывает все подписки в файл JSON-массивом. */
-    fun save() {
+    /**
+     * Записывает все подписки в файл JSON-массивом.
+     *
+     * @return `true`, если файл записан; `false`, если запись не удалась
+     *   (ошибка уже залогирована, данные в памяти не теряются).
+     */
+    fun save(): Boolean {
         val array = JSONArray()
         _items.forEach { array.put(it.json) }
-        file.parentFile?.mkdirs()
-        file.writeText(array.toString())
-        Timber.i("Сохранено подписок: %d в %s", _items.size, file.path)
+        return try {
+            file.parentFile?.mkdirs()
+            file.writeText(array.toString())
+            Timber.i("Сохранено подписок: %d в %s", _items.size, file.path)
+            true
+        } catch (e: IOException) {
+            Timber.e(e, "Не удалось записать %d подписок в %s", _items.size, file.path)
+            false
+        }
     }
 
     /**

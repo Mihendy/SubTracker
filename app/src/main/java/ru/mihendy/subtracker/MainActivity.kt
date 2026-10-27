@@ -59,7 +59,9 @@ class MainActivity : ComponentActivity() {
                 if (storage.items.isEmpty()) {
                     demoSubscriptions().forEach { storage.add(it) }
                 }
-                storage.save()
+                if (!storage.save()) {
+                    Timber.w("Проверка хранилища: сохранить не удалось, читаем то, что есть на диске")
+                }
 
                 // Новый экземпляр читает тот же файл — так видно, что данные реально на диске
                 SubscriptionStorage(applicationContext).apply { load() }.items
