@@ -7,7 +7,9 @@ import org.junit.Test
 import ru.mihendy.subtracker.data.BillingPeriod
 import ru.mihendy.subtracker.data.Importance
 import ru.mihendy.subtracker.data.Subscription
+import java.math.BigDecimal
 import java.time.LocalDate
+import java.util.Currency
 
 class SubscriptionDraftTest {
 
@@ -21,8 +23,8 @@ class SubscriptionDraftTest {
 
     @Test
     fun amount_acceptsCommaAndDot() {
-        assertEquals(12.5, valid().copy(amountText = "12,5").amount)
-        assertEquals(12.5, valid().copy(amountText = " 12.5 ").amount)
+        assertEquals(BigDecimal("12.5"), valid().copy(amountText = "12,5").amount)
+        assertEquals(BigDecimal("12.5"), valid().copy(amountText = " 12.5 ").amount)
     }
 
     @Test
@@ -38,6 +40,7 @@ class SubscriptionDraftTest {
         assertNull(valid().copy(amountText = "").toSubscription())
         assertNull(valid().copy(currency = "RU").toSubscription())
         assertNull(valid().copy(currency = "rub").toSubscription())
+        assertNull(valid().copy(currency = "XYZ").toSubscription())
     }
 
     @Test
@@ -55,8 +58,8 @@ class SubscriptionDraftTest {
         val expected = Subscription(
             uid = draft.uid,
             name = "Облако",
-            amount = 2.99,
-            currency = "USD",
+            amount = BigDecimal("2.99"),
+            currency = Currency.getInstance("USD"),
             period = BillingPeriod.YEARLY,
             nextPaymentDate = date,
             importance = Importance.ESSENTIAL,
@@ -71,7 +74,7 @@ class SubscriptionDraftTest {
     fun from_thenToSubscription_givesSameSubscription() {
         val subscription = Subscription(
             name = "Музыка",
-            amount = 199.0,
+            amount = BigDecimal("199"),
             nextPaymentDate = date,
             importance = Importance.NORMAL,
         )

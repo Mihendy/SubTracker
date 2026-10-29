@@ -33,6 +33,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -60,7 +62,7 @@ import java.time.format.FormatStyle
  * любую функцию можно показать в @Preview без заглушек.
  */
 
-/** Цвета-метки на выбор (ARGB): белый «без метки» и приглушённые цвета радуги. */
+/** Цвета-метки на выбор (ARGB): белый и приглушённые цвета радуги. «Без метки» — отдельный кружок. */
 val SubscriptionColors: List<Int> = listOf(
     0xFFFFFFFF, // белый
     0xFFE57373, // красный
@@ -312,13 +314,14 @@ private fun LabeledValue(label: String, value: String, modifier: Modifier = Modi
 
 /**
  * Выбор цветовой метки: ряд кружков, выбранный обведён рамкой.
+ * Первый кружок — перечёркнутый «без метки» (`null`), за ним цвета из [colors].
  * [FlowRow] переносит кружки на новую строку, если они не помещаются по ширине.
  */
 @Composable
 fun ColorSection(
     colors: List<Int>,
-    selected: Int,
-    onSelect: (Int) -> Unit,
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -327,6 +330,12 @@ fun ColorSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            ColorDot(
+                color = null,
+                isSelected = selected == null,
+                description = stringResource(R.string.edit_color_none),
+                onClick = { onSelect(null) },
+            )
             colors.forEachIndexed { index, color ->
                 ColorDot(
                     color = Color(color),
@@ -339,10 +348,13 @@ fun ColorSection(
     }
 }
 
-/** Один цветной кружок. Тонкая рамка есть всегда (чтобы был виден белый), у выбранного — толстая. */
+/**
+ * Один кружок выбора цвета. Тонкая рамка есть всегда (чтобы был виден белый),
+ * у выбранного — толстая. [color] == `null` — «без метки»: пустой кружок с диагональю.
+ */
 @Composable
 private fun ColorDot(
-    color: Color,
+    color: Color?,
     isSelected: Boolean,
     description: String,
     onClick: () -> Unit,
@@ -353,11 +365,26 @@ private fun ColorDot(
     } else {
         BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     }
+    val strikeColor = MaterialTheme.colorScheme.outline
     Spacer(
         modifier = modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(color)
+            .then(
+                if (color != null) {
+                    Modifier.background(color)
+                } else {
+                    // Диагональ из левого нижнего угла в правый верхний
+                    Modifier.drawBehind {
+                        drawLine(
+                            color = strikeColor,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, 0f),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                    }
+                },
+            )
             .border(border, CircleShape)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .semantics {

@@ -8,13 +8,14 @@
     <string name="edit_amount">Сумма</string>
     <string name="edit_amount_error">Положительное число</string>
     <string name="edit_currency">Валюта</string>
-    <string name="edit_currency_error">3 буквы</string>
+    <string name="edit_currency_error">Нет такой</string>
     <string name="edit_period">Период</string>
     <string name="edit_importance">Важность</string>
     <string name="edit_next_payment">Следующее списание</string>
     <string name="edit_end_date">Окончание</string>
     <string name="edit_end_date_none">бессрочно</string>
     <string name="edit_color">Цвет</string>
+    <string name="edit_color_none">Без метки</string>
     <string name="edit_color_item">Цвет %1$d</string>
     <string name="edit_active">Активна</string>
     <string name="edit_save">Сохранить</string>

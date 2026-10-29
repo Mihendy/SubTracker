@@ -8,6 +8,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.math.BigDecimal
 import java.time.LocalDate
 
 class SubscriptionStorageTest {
@@ -21,7 +22,7 @@ class SubscriptionStorageTest {
 
     private fun sub(name: String, endDate: LocalDate? = null) = Subscription(
         name = name,
-        amount = 100.0,
+        amount = BigDecimal("100"),
         nextPaymentDate = today.plusDays(5),
         importance = Importance.NORMAL,
         endDate = endDate,
@@ -101,7 +102,7 @@ class SubscriptionStorageTest {
         val storage = SubscriptionStorage(file())
         val a = sub("A")
         storage.add(a)
-        assertFalse(storage.remove("нет-такого-uid"))
+        assertFalse(storage.remove(SubscriptionId("нет-такого-uid")))
         assertEquals(1, storage.items.size)
         assertTrue(storage.remove(a.uid))
         assertTrue(storage.items.isEmpty())
