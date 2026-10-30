@@ -1,7 +1,6 @@
 package ru.mihendy.subtracker.ui.edit
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,19 +8,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -29,13 +32,21 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -48,10 +59,12 @@ import androidx.compose.ui.unit.dp
 import ru.mihendy.subtracker.R
 import ru.mihendy.subtracker.data.BillingPeriod
 import ru.mihendy.subtracker.data.Importance
+import ru.mihendy.subtracker.ui.common.SubscriptionCard
 import ru.mihendy.subtracker.ui.theme.SubTrackerTheme
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.concurrent.TimeUnit
 
 /*
  * Экран создания/редактирования подписки.
@@ -62,7 +75,7 @@ import java.time.format.FormatStyle
  * любую функцию можно показать в @Preview без заглушек.
  */
 
-/** Цвета-метки на выбор (ARGB): белый и приглушённые цвета радуги. «Без метки» — отдельный кружок. */
+/** Цвета-метки на выбор (ARGB): белый и приглушённые цвета радуги. «Без метки» — отдельный квадратик. */
 val SubscriptionColors: List<Int> = listOf(
     0xFFFFFFFF, // белый
     0xFFE57373, // красный
@@ -92,10 +105,13 @@ fun EditSubscriptionScreen(
     modifier: Modifier = Modifier,
 ) {
     // Прокрутка нужна, чтобы в альбомной ориентации форма не обрезалась снизу.
+    // imePadding уменьшает область на высоту клавиатуры, а поле в фокусе
+    // само прокручивается в видимую часть — так клавиатура его не закрывает.
     // На широком экране форма не растягивается больше FORM_MAX_WIDTH и стоит по центру.
     Box(
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -121,6 +137,14 @@ private fun EditSubscriptionForm(
             text = stringResource(R.string.edit_title),
             style = MaterialTheme.typography.headlineMedium,
         )
+        SubscriptionCard(
+            name = draft.name,
+            amount = draft.amount?.toPlainString(),
+            currency = draft.currency,
+            nextPaymentDate = draft.nextPaymentDate,
+            color = draft.color,
+            isActive = draft.isActive,
+        )
         NameField(
             name = draft.name,
             isError = !draft.isNameValid,
@@ -144,6 +168,8 @@ private fun EditSubscriptionForm(
         DatesSection(
             nextPaymentDate = draft.nextPaymentDate,
             endDate = draft.endDate,
+            onNextPaymentDateChange = { onDraftChange(draft.copy(nextPaymentDate = it)) },
+            onEndDateChange = { onDraftChange(draft.copy(endDate = it)) },
         )
         ChoiceSection(
             title = stringResource(R.string.edit_importance),
@@ -156,6 +182,10 @@ private fun EditSubscriptionForm(
             colors = SubscriptionColors,
             selected = draft.color,
             onSelect = { onDraftChange(draft.copy(color = it)) },
+        )
+        NoteField(
+            note = draft.noteText,
+            onNoteChange = { onDraftChange(draft.copy(noteText = it)) },
         )
         ActiveRow(
             isActive = draft.isActive,
@@ -277,45 +307,150 @@ fun <T> ChoiceSection(
 }
 
 /**
- * Даты списания и окончания. Пока только отображаются:
- * выбор даты через календарь — усложнение, в базовой части его нет.
+ * Даты списания и окончания. Нажатие на дату открывает стандартный календарь.
+ * Дату окончания можно сбросить кнопкой «Бессрочно».
  */
 @Composable
 fun DatesSection(
     nextPaymentDate: LocalDate,
     endDate: LocalDate?,
+    onNextPaymentDateChange: (LocalDate) -> Unit,
+    onEndDateChange: (LocalDate?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val formatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        LabeledValue(
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        DateField(
             label = stringResource(R.string.edit_next_payment),
-            value = nextPaymentDate.format(formatter),
+            date = nextPaymentDate,
+            onDateSelected = onNextPaymentDateChange,
         )
-        LabeledValue(
+        DateField(
             label = stringResource(R.string.edit_end_date),
-            value = endDate?.format(formatter) ?: stringResource(R.string.edit_end_date_none),
+            date = endDate,
+            onDateSelected = onEndDateChange,
+            onClear = { onEndDateChange(null) },
         )
     }
 }
 
-/** Строка «подпись слева — значение справа». */
+/**
+ * Строка «подпись — дата». Дата — кнопка, по нажатию открывается календарь.
+ *
+ * Открыт ли календарь — внутреннее состояние этой строки (оно никому снаружи
+ * не нужно), поэтому хранится здесь. rememberSaveable — чтобы открытый
+ * календарь не закрылся при повороте экрана.
+ *
+ * @param date выбранная дата; `null` — не задана (показывается «бессрочно»).
+ * @param onClear если задан, в календаре появляется кнопка «Бессрочно».
+ */
 @Composable
-private fun LabeledValue(label: String, value: String, modifier: Modifier = Modifier) {
+private fun DateField(
+    label: String,
+    date: LocalDate?,
+    onDateSelected: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier,
+    onClear: (() -> Unit)? = null,
+) {
+    var showPicker by rememberSaveable { mutableStateOf(false) }
+    val formatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)
+
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
-        Text(text = value, style = MaterialTheme.typography.bodyLarge)
+        TextButton(onClick = { showPicker = true }) {
+            Text(date?.format(formatter) ?: stringResource(R.string.edit_end_date_none))
+        }
+    }
+
+    if (showPicker) {
+        DatePickerModal(
+            initialDate = date,
+            onConfirm = onDateSelected,
+            onClear = onClear,
+            onDismiss = { showPicker = false },
+        )
     }
 }
 
 /**
- * Выбор цветовой метки: ряд кружков, выбранный обведён рамкой.
- * Первый кружок — перечёркнутый «без метки» (`null`), за ним цвета из [colors].
- * [FlowRow] переносит кружки на новую строку, если они не помещаются по ширине.
+ * Стандартный диалог выбора даты из Material 3.
+ *
+ * DatePicker работает с миллисекундами в UTC, поэтому дата переводится
+ * туда и обратно через [toUtcMillis] / [utcMillisToLocalDate].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerModal(
+    initialDate: LocalDate?,
+    onConfirm: (LocalDate) -> Unit,
+    onClear: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val state = rememberDatePickerState(initialSelectedDateMillis = initialDate?.toUtcMillis())
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    state.selectedDateMillis?.let { onConfirm(utcMillisToLocalDate(it)) }
+                    onDismiss()
+                },
+                enabled = state.selectedDateMillis != null,
+            ) {
+                Text(stringResource(R.string.dialog_ok))
+            }
+        },
+        dismissButton = {
+            Row {
+                if (onClear != null) {
+                    TextButton(onClick = { onClear(); onDismiss() }) {
+                        Text(stringResource(R.string.edit_end_date_clear))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            }
+        },
+    ) {
+        DatePicker(state = state)
+    }
+}
+
+/** Начало дня [this] в UTC, в миллисекундах — формат, который понимает DatePicker. */
+private fun LocalDate.toUtcMillis(): Long = TimeUnit.DAYS.toMillis(toEpochDay())
+
+/** Обратно: миллисекунды UTC от DatePicker → дата. */
+private fun utcMillisToLocalDate(millis: Long): LocalDate =
+    LocalDate.ofEpochDay(Math.floorDiv(millis, TimeUnit.DAYS.toMillis(1)))
+
+/**
+ * Заметка. Поле растёт по мере ввода текста, но не бывает ниже трёх строк
+ * ([minLines]); верхнего предела нет — длинную заметку прокручивает вся форма.
+ */
+@Composable
+fun NoteField(
+    note: String,
+    onNoteChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = note,
+        onValueChange = onNoteChange,
+        label = { Text(stringResource(R.string.edit_note)) },
+        minLines = 3,
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Выбор цветовой метки: квадратики с чёрной рамкой, на выбранном — галочка.
+ * Первый квадратик — перечёркнутый «без метки» (`null`), за ним цвета из [colors].
+ * [FlowRow] переносит квадратики на новую строку, если они не помещаются по ширине.
  */
 @Composable
 fun ColorSection(
@@ -330,14 +465,14 @@ fun ColorSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ColorDot(
+            ColorSwatch(
                 color = null,
                 isSelected = selected == null,
                 description = stringResource(R.string.edit_color_none),
                 onClick = { onSelect(null) },
             )
             colors.forEachIndexed { index, color ->
-                ColorDot(
+                ColorSwatch(
                     color = Color(color),
                     isSelected = color == selected,
                     description = stringResource(R.string.edit_color_item, index + 1),
@@ -348,28 +483,27 @@ fun ColorSection(
     }
 }
 
+private val SwatchShape = RoundedCornerShape(4.dp)
+
 /**
- * Один кружок выбора цвета. Тонкая рамка есть всегда (чтобы был виден белый),
- * у выбранного — толстая. [color] == `null` — «без метки»: пустой кружок с диагональю.
+ * Один квадратик выбора цвета: чёрная рамка, на выбранном — галочка.
+ * [color] == `null` — «без метки»: пустой квадратик с диагональю.
+ *
+ * Галочка чёрная на светлых цветах и белая на тёмных — чтобы её было видно на любом.
  */
 @Composable
-private fun ColorDot(
+private fun ColorSwatch(
     color: Color?,
     isSelected: Boolean,
     description: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val border = if (isSelected) {
-        BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
-    } else {
-        BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-    }
-    val strikeColor = MaterialTheme.colorScheme.outline
-    Spacer(
+    val checkColor = if (color == null || color.luminance() > 0.5f) Color.Black else Color.White
+    Box(
         modifier = modifier
             .size(40.dp)
-            .clip(CircleShape)
+            .clip(SwatchShape)
             .then(
                 if (color != null) {
                     Modifier.background(color)
@@ -377,7 +511,7 @@ private fun ColorDot(
                     // Диагональ из левого нижнего угла в правый верхний
                     Modifier.drawBehind {
                         drawLine(
-                            color = strikeColor,
+                            color = Color.Gray,
                             start = Offset(0f, size.height),
                             end = Offset(size.width, 0f),
                             strokeWidth = 2.dp.toPx(),
@@ -385,13 +519,23 @@ private fun ColorDot(
                     }
                 },
             )
-            .border(border, CircleShape)
+            .border(1.dp, Color.Black, SwatchShape)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .semantics {
                 contentDescription = description
                 selected = isSelected
             },
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        if (isSelected) {
+            Icon(
+                painter = painterResource(R.drawable.ic_check),
+                // Описание уже есть у квадратика (semantics выше), галочке своё не нужно
+                contentDescription = null,
+                tint = checkColor,
+            )
+        }
+    }
 }
 
 /** Переключатель «Активна». */
@@ -442,6 +586,7 @@ private val filledDraft = SubscriptionDraft(
     importance = Importance.ESSENTIAL,
     color = SubscriptionColors[4],
     endDate = previewDate.plusYears(1),
+    noteText = "Оплата с карты *1234",
 )
 
 @Preview(showBackground = true, name = "Пустая форма")
@@ -474,6 +619,7 @@ private fun LongTextPreview() {
                 amountText = "123456789.99",
                 currency = "USD",
                 isActive = false,
+                noteText = "Длинная заметка.\nВторая строка.\nТретья строка.\nЧетвёртая — поле выросло.",
             ),
             onDraftChange = {},
             onSave = {},

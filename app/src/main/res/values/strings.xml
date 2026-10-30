@@ -18,6 +18,16 @@
     <string name="edit_color_none">Без метки</string>
     <string name="edit_color_item">Цвет %1$d</string>
     <string name="edit_active">Активна</string>
+    <string name="edit_note">Заметка</string>
+    <string name="edit_end_date_clear">Бессрочно</string>
+    <string name="dialog_ok">ОК</string>
+    <string name="dialog_cancel">Отмена</string>
+
+    <!-- Карточка подписки -->
+    <string name="card_untitled">Без названия</string>
+    <string name="card_no_amount">—</string>
+    <string name="card_next_payment">Списание %1$s</string>
+    <string name="card_paused">Приостановлена</string>
     <string name="edit_save">Сохранить</string>
     <string name="edit_saved">Сохранено</string>
     <string name="edit_save_failed">Не удалось сохранить</string>

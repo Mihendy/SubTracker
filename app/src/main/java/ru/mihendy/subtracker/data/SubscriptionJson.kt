@@ -17,6 +17,7 @@ private const val KEY_IMPORTANCE = "importance"
 private const val KEY_COLOR = "color"
 private const val KEY_END_DATE = "endDate"
 private const val KEY_IS_ACTIVE = "isActive"
+private const val KEY_NOTE = "note"
 
 /**
  * Подписка в виде JSON.
@@ -24,7 +25,7 @@ private const val KEY_IS_ACTIVE = "isActive"
  * Пишутся только примитивы: id — строкой, сумма — строкой («2.99», чтобы не терять
  * точность на Double), валюта — кодом ISO, даты — как `toEpochDay()` (число дней
  * с 1970-01-01), enum — как имя константы, цвет — как Int.
- * Значения по умолчанию (NORMAL, без цвета, `endDate == null`, RUB, MONTHLY, активна)
+ * Значения по умолчанию (NORMAL, без цвета, `endDate == null`, RUB, MONTHLY, активна, без заметки)
  * не пишутся, чтобы файл был компактнее; [parse] подставит их обратно.
  */
 val Subscription.json: JSONObject
@@ -40,6 +41,7 @@ val Subscription.json: JSONObject
         color?.let { json.put(KEY_COLOR, it) }
         endDate?.let { json.put(KEY_END_DATE, it.toEpochDay()) }
         if (!isActive) json.put(KEY_IS_ACTIVE, false)
+        note?.let { json.put(KEY_NOTE, it) }
         return json
     }
 
@@ -70,6 +72,7 @@ fun Subscription.Companion.parse(json: JSONObject): Subscription? {
     val color = (json.opt(KEY_COLOR) as? Number)?.toInt()
     val endDate = json.optEpochDay(KEY_END_DATE)
     val isActive = json.opt(KEY_IS_ACTIVE) as? Boolean ?: true
+    val note = (json.opt(KEY_NOTE) as? String)?.takeIf { it.isNotBlank() }
 
     return Subscription(
         uid = SubscriptionId(uid),
@@ -82,6 +85,7 @@ fun Subscription.Companion.parse(json: JSONObject): Subscription? {
         color = color,
         endDate = endDate,
         isActive = isActive,
+        note = note,
     )
 }
 

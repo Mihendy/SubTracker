@@ -31,6 +31,7 @@ data class SubscriptionDraft(
     val color: Int? = null,
     val endDate: LocalDate? = null,
     val isActive: Boolean = true,
+    val noteText: String = "",
 ) {
 
     /** Сумма из [amountText]; принимает и запятую, и точку. `null` — не число или не больше нуля. */
@@ -66,6 +67,8 @@ data class SubscriptionDraft(
             color = color,
             endDate = endDate,
             isActive = isActive,
+            // Пустая заметка — это «заметки нет», а не пустая строка
+            note = noteText.trim().ifEmpty { null },
         )
     }
 
@@ -84,6 +87,7 @@ data class SubscriptionDraft(
             color = subscription.color,
             endDate = subscription.endDate,
             isActive = subscription.isActive,
+            noteText = subscription.note.orEmpty(),
         )
 
         /**
@@ -110,6 +114,7 @@ data class SubscriptionDraft(
                         draft.color,
                         draft.endDate?.toEpochDay(),
                         draft.isActive,
+                        draft.noteText,
                     )
                 }
             },
@@ -128,6 +133,7 @@ data class SubscriptionDraft(
                         color = list[7] as Int?,
                         endDate = (list[8] as Long?)?.let { LocalDate.ofEpochDay(it) },
                         isActive = list[9] as Boolean,
+                        noteText = list[10] as String,
                     )
                 }
             },

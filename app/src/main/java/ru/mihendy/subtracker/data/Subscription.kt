@@ -41,6 +41,7 @@ enum class BillingPeriod {
  *   стали бы неразличимы.
  * @property endDate дата окончания подписки; `null` — бессрочная.
  * @property isActive активна ли подписка (можно приостановить, не удаляя).
+ * @property note заметка в свободной форме; `null` — заметки нет.
  */
 data class Subscription(
     val uid: SubscriptionId = SubscriptionId.random(),
@@ -53,6 +54,7 @@ data class Subscription(
     val color: Int? = null,
     val endDate: LocalDate? = null,
     val isActive: Boolean = true,
+    val note: String? = null,
 ) {
 
     /**

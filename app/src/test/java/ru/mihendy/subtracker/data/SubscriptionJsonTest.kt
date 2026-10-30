@@ -29,6 +29,7 @@ class SubscriptionJsonTest {
         color = 0xFF2196F3.toInt(),
         endDate = LocalDate.of(2028, 1, 15),
         isActive = false,
+        note = "Семейный тариф\nна 4 человек",
     )
 
     @Test
@@ -56,6 +57,7 @@ class SubscriptionJsonTest {
         assertFalse(json.has("currency"))
         assertFalse(json.has("period"))
         assertFalse(json.has("isActive"))
+        assertFalse(json.has("note"))
         // обязательные поля и uid — пишутся всегда
         assertEquals(setOf("uid", "name", "amount", "nextPaymentDate"), json.keys().asSequence().toSet())
     }
@@ -119,6 +121,12 @@ class SubscriptionJsonTest {
         assertNull(Subscription.parse(minimal.json)?.color)
         val white = minimal.copy(color = 0xFFFFFFFF.toInt())
         assertEquals(white, Subscription.parse(JSONObject(white.json.toString())))
+    }
+
+    @Test
+    fun parse_blankNote_isNoNote() {
+        assertNull(Subscription.parse(minimal.json.put("note", "   "))?.note)
+        assertNull(Subscription.parse(minimal.json.put("note", 42))?.note)
     }
 
     @Test

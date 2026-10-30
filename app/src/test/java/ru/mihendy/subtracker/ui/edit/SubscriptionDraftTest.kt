@@ -71,6 +71,12 @@ class SubscriptionDraftTest {
     }
 
     @Test
+    fun note_blankBecomesNull_otherwiseTrimmed() {
+        assertNull(valid().copy(noteText = "  \n ").toSubscription()?.note)
+        assertEquals("строка 1\nстрока 2", valid().copy(noteText = "\nстрока 1\nстрока 2  ").toSubscription()?.note)
+    }
+
+    @Test
     fun from_thenToSubscription_givesSameSubscription() {
         val subscription = Subscription(
             name = "Музыка",
