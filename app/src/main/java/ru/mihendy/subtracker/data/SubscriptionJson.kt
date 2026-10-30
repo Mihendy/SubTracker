@@ -1,9 +1,10 @@
 package ru.mihendy.subtracker.data
 
-import android.graphics.Color
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.time.DateTimeException
 import java.time.LocalDate
+import java.util.Currency
 
 // Ключи JSON вынесены в константы, чтобы запись и чтение не разошлись из-за опечатки.
 private const val KEY_UID = "uid"
@@ -16,30 +17,31 @@ private const val KEY_IMPORTANCE = "importance"
 private const val KEY_COLOR = "color"
 private const val KEY_END_DATE = "endDate"
 private const val KEY_IS_ACTIVE = "isActive"
-
-private const val DEFAULT_CURRENCY = "RUB"
+private const val KEY_NOTE = "note"
 
 /**
  * Подписка в виде JSON.
  *
- * Пишутся только примитивы: даты — как `toEpochDay()` (число дней с 1970-01-01),
- * enum — как имя константы, цвет — как Int.
- * Значения по умолчанию (NORMAL, белый цвет, `endDate == null`, RUB, MONTHLY, активна)
+ * Пишутся только примитивы: id — строкой, сумма — строкой («2.99», чтобы не терять
+ * точность на Double), валюта — кодом ISO, даты — как `toEpochDay()` (число дней
+ * с 1970-01-01), enum — как имя константы, цвет — как Int.
+ * Значения по умолчанию (NORMAL, без цвета, `endDate == null`, RUB, MONTHLY, активна, без заметки)
  * не пишутся, чтобы файл был компактнее; [parse] подставит их обратно.
  */
 val Subscription.json: JSONObject
     get() {
         val json = JSONObject()
-        json.put(KEY_UID, uid)
+        json.put(KEY_UID, uid.value)
         json.put(KEY_NAME, name)
-        json.put(KEY_AMOUNT, amount)
+        json.put(KEY_AMOUNT, amount.toPlainString())
         json.put(KEY_NEXT_PAYMENT, nextPaymentDate.toEpochDay())
-        if (currency != DEFAULT_CURRENCY) json.put(KEY_CURRENCY, currency)
+        if (currency != Subscription.DEFAULT_CURRENCY) json.put(KEY_CURRENCY, currency.currencyCode)
         if (period != BillingPeriod.MONTHLY) json.put(KEY_PERIOD, period.name)
         if (importance != Importance.NORMAL) json.put(KEY_IMPORTANCE, importance.name)
-        if (color != Color.WHITE) json.put(KEY_COLOR, color)
+        color?.let { json.put(KEY_COLOR, it) }
         endDate?.let { json.put(KEY_END_DATE, it.toEpochDay()) }
         if (!isActive) json.put(KEY_IS_ACTIVE, false)
+        note?.let { json.put(KEY_NOTE, it) }
         return json
     }
 
@@ -47,7 +49,9 @@ val Subscription.json: JSONObject
  * Восстанавливает подписку из JSON. Никогда не бросает исключений.
  *
  * - нет или битое одно из обязательных полей (`uid`, `name`, `amount`, `nextPaymentDate`) → `null`;
- * - необязательное поле отсутствует или некорректно → значение по умолчанию.
+ * - валюты нет → рубли (так пишется значение по умолчанию); валюта есть, но код
+ *   неизвестен → `null`: молча подставить рубли значило бы превратить 10 $ в 10 ₽;
+ * - другое необязательное поле отсутствует или некорректно → значение по умолчанию.
  *
  * `uid` обязателен намеренно: если подставлять новый, одна и та же подписка,
  * пришедшая повторно (например, по сети), получит другой id и задвоится.
@@ -59,31 +63,50 @@ fun Subscription.Companion.parse(json: JSONObject): Subscription? {
     val name = json.opt(KEY_NAME) as? String
     if (name.isNullOrBlank()) return null
 
-    // optDouble вернёт NaN, если поля нет или это не число.
-    val amount = json.optDouble(KEY_AMOUNT)
-    if (!amount.isFinite()) return null
-
+    val amount = json.optAmount() ?: return null
     val nextPaymentDate = json.optEpochDay(KEY_NEXT_PAYMENT) ?: return null
+    val currency = json.optCurrency() ?: return null
 
-    val currency = (json.opt(KEY_CURRENCY) as? String)?.takeIf { it.isNotBlank() }
     val period = json.optEnum(KEY_PERIOD) ?: BillingPeriod.MONTHLY
     val importance = json.optEnum(KEY_IMPORTANCE) ?: Importance.NORMAL
-    val color = (json.opt(KEY_COLOR) as? Number)?.toInt() ?: Color.WHITE
+    val color = (json.opt(KEY_COLOR) as? Number)?.toInt()
     val endDate = json.optEpochDay(KEY_END_DATE)
     val isActive = json.opt(KEY_IS_ACTIVE) as? Boolean ?: true
+    val note = (json.opt(KEY_NOTE) as? String)?.takeIf { it.isNotBlank() }
 
     return Subscription(
-        uid = uid,
+        uid = SubscriptionId(uid),
         name = name,
         amount = amount,
-        currency = currency ?: DEFAULT_CURRENCY,
+        currency = currency,
         period = period,
         nextPaymentDate = nextPaymentDate,
         importance = importance,
         color = color,
         endDate = endDate,
         isActive = isActive,
+        note = note,
     )
+}
+
+/**
+ * Читает сумму. Сейчас она пишется строкой («2.99»), но старые файлы хранят её
+ * числом (199.0) — читаем оба варианта. Нет поля или не число → `null`.
+ */
+private fun JSONObject.optAmount(): BigDecimal? = when (val raw = opt(KEY_AMOUNT)) {
+    is String -> raw.toBigDecimalOrNull()
+    is Number -> raw.toString().toBigDecimalOrNull()
+    else -> null
+}
+
+/**
+ * Читает валюту. Поля нет → рубли (значение по умолчанию в файл не пишется).
+ * Поле есть, но это не строка или неизвестный код → `null` (подписка битая).
+ */
+private fun JSONObject.optCurrency(): Currency? = when (val raw = opt(KEY_CURRENCY)) {
+    null -> Subscription.DEFAULT_CURRENCY
+    is String -> currencyOrNull(raw)
+    else -> null
 }
 
 /** Читает дату, записанную как epochDay. Нет поля, не число или дата вне диапазона → `null`. */
