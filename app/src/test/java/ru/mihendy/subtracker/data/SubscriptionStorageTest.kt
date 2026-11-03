@@ -22,7 +22,7 @@ class SubscriptionStorageTest {
 
     private fun sub(name: String, endDate: LocalDate? = null) = Subscription(
         name = name,
-        amount = BigDecimal("100"),
+        price = Money(BigDecimal("100"), Money.RUB),
         nextPaymentDate = today.plusDays(5),
         importance = Importance.NORMAL,
         endDate = endDate,

@@ -4,6 +4,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import ru.mihendy.subtracker.data.BillingPeriod
 import ru.mihendy.subtracker.data.Importance
+import ru.mihendy.subtracker.data.Money
 import ru.mihendy.subtracker.data.Subscription
 import ru.mihendy.subtracker.data.SubscriptionId
 import ru.mihendy.subtracker.data.currencyOrNull
@@ -17,6 +18,9 @@ import java.time.LocalDate
  * хранятся строками как введены («12,5», «абв», «US»), название может быть пустым.
  * Готовая подписка получается через [toSubscription] только из корректного черновика.
  *
+ * Сумма и код валюты здесь — два отдельных поля, потому что в форме это два отдельных
+ * поля ввода. Но наружу они отдаются только вместе, как [price].
+ *
  * @property uid идентификатор подписки; у новой генерируется сразу, чтобы повторное
  *   «Сохранить» обновляло ту же запись, а не создавало копию.
  */
@@ -24,7 +28,7 @@ data class SubscriptionDraft(
     val uid: SubscriptionId = SubscriptionId.random(),
     val name: String = "",
     val amountText: String = "",
-    val currency: String = Subscription.DEFAULT_CURRENCY.currencyCode,
+    val currencyCode: String = Money.RUB.currencyCode,
     val period: BillingPeriod = BillingPeriod.MONTHLY,
     val nextPaymentDate: LocalDate,
     val importance: Importance = Importance.NORMAL,
@@ -44,23 +48,29 @@ data class SubscriptionDraft(
         get() = name.isNotBlank()
 
     /** Валюта по введённому коду ISO 4217 (RUB, USD, EUR); `null` — такой валюты нет. */
-    private val parsedCurrency
-        get() = currencyOrNull(currency)
+    private val currency
+        get() = currencyOrNull(currencyCode)
 
     /** Код валюты существует. */
     val isCurrencyValid: Boolean
-        get() = parsedCurrency != null
+        get() = currency != null
+
+    /** Цена из суммы и валюты; `null`, если неверно хотя бы одно из двух. */
+    val price: Money?
+        get() {
+            val amount = amount ?: return null
+            val currency = currency ?: return null
+            return Money(amount, currency)
+        }
 
     /** Подписка из черновика или `null`, если какое-то поле заполнено неверно. */
     fun toSubscription(): Subscription? {
-        val amount = amount ?: return null
-        val currency = parsedCurrency ?: return null
+        val price = price ?: return null
         if (!isNameValid) return null
         return Subscription(
             uid = uid,
             name = name.trim(),
-            amount = amount,
-            currency = currency,
+            price = price,
             period = period,
             nextPaymentDate = nextPaymentDate,
             importance = importance,
@@ -79,8 +89,8 @@ data class SubscriptionDraft(
             uid = subscription.uid,
             name = subscription.name,
             // toPlainString: 1000 → «1000», а не «1E+3», как может дать toString
-            amountText = subscription.amount.toPlainString(),
-            currency = subscription.currency.currencyCode,
+            amountText = subscription.price.amount.toPlainString(),
+            currencyCode = subscription.price.currency.currencyCode,
             period = subscription.period,
             nextPaymentDate = subscription.nextPaymentDate,
             importance = subscription.importance,
@@ -107,7 +117,7 @@ data class SubscriptionDraft(
                         draft.uid.value,
                         draft.name,
                         draft.amountText,
-                        draft.currency,
+                        draft.currencyCode,
                         draft.period.name,
                         draft.nextPaymentDate.toEpochDay(),
                         draft.importance.name,
@@ -126,7 +136,7 @@ data class SubscriptionDraft(
                         uid = SubscriptionId(list[0] as String),
                         name = list[1] as String,
                         amountText = list[2] as String,
-                        currency = list[3] as String,
+                        currencyCode = list[3] as String,
                         period = BillingPeriod.valueOf(list[4] as String),
                         nextPaymentDate = LocalDate.ofEpochDay(list[5] as Long),
                         importance = Importance.valueOf(list[6] as String),

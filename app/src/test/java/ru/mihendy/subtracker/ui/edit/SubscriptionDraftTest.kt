@@ -6,6 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import ru.mihendy.subtracker.data.BillingPeriod
 import ru.mihendy.subtracker.data.Importance
+import ru.mihendy.subtracker.data.Money
 import ru.mihendy.subtracker.data.Subscription
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -35,12 +36,21 @@ class SubscriptionDraftTest {
     }
 
     @Test
+    fun price_needsBothAmountAndCurrency() {
+        assertEquals(Money(BigDecimal("199"), Money.RUB), valid().price)
+        // Сумма без валюты и валюта без суммы — это не цена
+        assertNull(valid().copy(currencyCode = "").price)
+        assertNull(valid().copy(currencyCode = "XYZ").price)
+        assertNull(valid().copy(amountText = "").price)
+    }
+
+    @Test
     fun toSubscription_invalidFields_givesNull() {
         assertNull(valid().copy(name = "   ").toSubscription())
         assertNull(valid().copy(amountText = "").toSubscription())
-        assertNull(valid().copy(currency = "RU").toSubscription())
-        assertNull(valid().copy(currency = "rub").toSubscription())
-        assertNull(valid().copy(currency = "XYZ").toSubscription())
+        assertNull(valid().copy(currencyCode = "RU").toSubscription())
+        assertNull(valid().copy(currencyCode = "rub").toSubscription())
+        assertNull(valid().copy(currencyCode = "XYZ").toSubscription())
     }
 
     @Test
@@ -48,7 +58,7 @@ class SubscriptionDraftTest {
         val draft = valid().copy(
             name = "  Облако  ",
             amountText = "2.99",
-            currency = "USD",
+            currencyCode = "USD",
             period = BillingPeriod.YEARLY,
             importance = Importance.ESSENTIAL,
             color = 0xFFC8E6C9.toInt(),
@@ -58,8 +68,7 @@ class SubscriptionDraftTest {
         val expected = Subscription(
             uid = draft.uid,
             name = "Облако",
-            amount = BigDecimal("2.99"),
-            currency = Currency.getInstance("USD"),
+            price = Money(BigDecimal("2.99"), Currency.getInstance("USD")),
             period = BillingPeriod.YEARLY,
             nextPaymentDate = date,
             importance = Importance.ESSENTIAL,
@@ -80,7 +89,7 @@ class SubscriptionDraftTest {
     fun from_thenToSubscription_givesSameSubscription() {
         val subscription = Subscription(
             name = "Музыка",
-            amount = BigDecimal("199"),
+            price = Money(BigDecimal("199"), Money.RUB),
             nextPaymentDate = date,
             importance = Importance.NORMAL,
         )

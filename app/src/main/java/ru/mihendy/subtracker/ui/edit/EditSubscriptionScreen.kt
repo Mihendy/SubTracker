@@ -5,9 +5,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -91,6 +93,13 @@ val SubscriptionColors: List<Int> = listOf(
 private val FORM_MAX_WIDTH = 600.dp
 
 /**
+ * С какой ширины экрана превью ставится слева от формы, а не над ней.
+ * 600dp — граница между телефоном в портретной ориентации и «широким» экраном
+ * (телефон в альбомной, планшет) по рекомендациям Material.
+ */
+private val SIDE_BY_SIDE_MIN_WIDTH = 600.dp
+
+/**
  * Вся форма целиком.
  *
  * @param draft что показывать.
@@ -104,14 +113,81 @@ fun EditSubscriptionScreen(
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Прокрутка нужна, чтобы в альбомной ориентации форма не обрезалась снизу.
+    // Превью закреплено: прокручивается только форма, а карточка всегда на виду,
+    // и видно, как она меняется, даже когда редактируешь поля внизу.
+    // На узком экране превью над формой, на широком — слева: в альбомной ориентации
+    // высоты мало, и закреплённая сверху карточка заняла бы половину экрана.
     // imePadding уменьшает область на высоту клавиатуры, а поле в фокусе
     // само прокручивается в видимую часть — так клавиатура его не закрывает.
-    // На широком экране форма не растягивается больше FORM_MAX_WIDTH и стоит по центру.
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .imePadding()
+            .imePadding(),
+    ) {
+        if (maxWidth < SIDE_BY_SIDE_MIN_WIDTH) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Нижний отступ шапки не прокручивается, поэтому поля при прокрутке
+                // уходят под карточку не вплотную, а с зазором
+                PreviewHeader(draft = draft, modifier = Modifier.padding(16.dp))
+                ScrollableForm(draft, onDraftChange, onSave, Modifier.weight(1f))
+            }
+        } else {
+            Row(modifier = Modifier.fillMaxSize()) {
+                PreviewHeader(
+                    draft = draft,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(16.dp),
+                )
+                // Сверху тот же отступ, что у шапки, — чтобы колонки начинались на одной высоте
+                ScrollableForm(
+                    draft = draft,
+                    onDraftChange = onDraftChange,
+                    onSave = onSave,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 16.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Заголовок экрана и карточка-превью: показывает, как подписка будет выглядеть в списке. */
+@Composable
+private fun PreviewHeader(draft: SubscriptionDraft, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.edit_title),
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        SubscriptionCard(
+            name = draft.name,
+            price = draft.price,
+            nextPaymentDate = draft.nextPaymentDate,
+            color = draft.color,
+            isActive = draft.isActive,
+        )
+    }
+}
+
+/**
+ * Прокручиваемая часть экрана — поля формы.
+ * На широком экране форма не растягивается больше FORM_MAX_WIDTH и стоит по центру.
+ */
+@Composable
+private fun ScrollableForm(
+    draft: SubscriptionDraft,
+    onDraftChange: (SubscriptionDraft) -> Unit,
+    onSave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
             .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -130,21 +206,10 @@ private fun EditSubscriptionForm(
         modifier = Modifier
             .widthIn(max = FORM_MAX_WIDTH)
             .fillMaxWidth()
-            .padding(16.dp),
+            // Верхнего отступа нет: он снаружи прокрутки (см. EditSubscriptionScreen)
+            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.edit_title),
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        SubscriptionCard(
-            name = draft.name,
-            amount = draft.amount?.toPlainString(),
-            currency = draft.currency,
-            nextPaymentDate = draft.nextPaymentDate,
-            color = draft.color,
-            isActive = draft.isActive,
-        )
         NameField(
             name = draft.name,
             isError = !draft.isNameValid,
@@ -152,11 +217,11 @@ private fun EditSubscriptionForm(
         )
         AmountRow(
             amountText = draft.amountText,
-            currency = draft.currency,
+            currencyCode = draft.currencyCode,
             isAmountError = draft.amount == null,
             isCurrencyError = !draft.isCurrencyValid,
             onAmountChange = { onDraftChange(draft.copy(amountText = it)) },
-            onCurrencyChange = { onDraftChange(draft.copy(currency = it)) },
+            onCurrencyChange = { onDraftChange(draft.copy(currencyCode = it)) },
         )
         ChoiceSection(
             title = stringResource(R.string.edit_period),
@@ -232,7 +297,7 @@ fun NameField(
 @Composable
 fun AmountRow(
     amountText: String,
-    currency: String,
+    currencyCode: String,
     isAmountError: Boolean,
     isCurrencyError: Boolean,
     onAmountChange: (String) -> Unit,
@@ -258,7 +323,7 @@ fun AmountRow(
             modifier = Modifier.weight(1f),
         )
         OutlinedTextField(
-            value = currency,
+            value = currencyCode,
             // Код валюты: только латиница, сразу в верхний регистр, не длиннее трёх букв
             onValueChange = { text ->
                 onCurrencyChange(text.filter { it in 'a'..'z' || it in 'A'..'Z' }.uppercase().take(3))
@@ -617,7 +682,7 @@ private fun LongTextPreview() {
             draft = filledDraft.copy(
                 name = "Очень длинное название подписки, которое не влезает в одну строку",
                 amountText = "123456789.99",
-                currency = "USD",
+                currencyCode = "USD",
                 isActive = false,
                 noteText = "Длинная заметка.\nВторая строка.\nТретья строка.\nЧетвёртая — поле выросло.",
             ),
