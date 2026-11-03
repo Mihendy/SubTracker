@@ -1,8 +1,6 @@
 package ru.mihendy.subtracker.data
 
-import java.math.BigDecimal
 import java.time.LocalDate
-import java.util.Currency
 
 /** Насколько подписка важна для пользователя. */
 enum class Importance {
@@ -30,9 +28,7 @@ enum class BillingPeriod {
  *
  * @property uid уникальный идентификатор, по умолчанию случайный.
  * @property name название сервиса.
- * @property amount сумма одного списания. [BigDecimal], а не Double: деньги нужно хранить
- *   точно, а в Double 0.1 + 0.2 ≠ 0.3.
- * @property currency валюта (ISO 4217), по умолчанию рубли.
+ * @property price сколько списывается за один раз — сумма вместе с валютой, см. [Money].
  * @property period периодичность списаний.
  * @property nextPaymentDate дата ближайшего списания.
  * @property importance важность подписки.
@@ -46,8 +42,7 @@ enum class BillingPeriod {
 data class Subscription(
     val uid: SubscriptionId = SubscriptionId.random(),
     val name: String,
-    val amount: BigDecimal,
-    val currency: Currency = DEFAULT_CURRENCY,
+    val price: Money,
     val period: BillingPeriod = BillingPeriod.MONTHLY,
     val nextPaymentDate: LocalDate,
     val importance: Importance,
@@ -84,20 +79,6 @@ data class Subscription(
         return current
     }
 
-    /** Ещё нужен, чтобы объявить расширение `Subscription.parse` в SubscriptionJson.kt. */
-    companion object {
-        /** Валюта по умолчанию — рубли. */
-        val DEFAULT_CURRENCY: Currency = Currency.getInstance("RUB")
-    }
-}
-
-/**
- * Валюта по коду ISO 4217 («RUB», «USD»). Неизвестный код или неверный регистр → `null`.
- *
- * Обёртка нужна, потому что [Currency.getInstance] на неизвестный код бросает исключение.
- */
-fun currencyOrNull(code: String): Currency? = try {
-    Currency.getInstance(code)
-} catch (e: IllegalArgumentException) {
-    null
+    /** Нужен, чтобы объявить расширение `Subscription.parse` в SubscriptionJson.kt. */
+    companion object
 }

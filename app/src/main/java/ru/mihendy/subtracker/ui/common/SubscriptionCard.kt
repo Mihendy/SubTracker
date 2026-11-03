@@ -23,7 +23,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ru.mihendy.subtracker.R
+import ru.mihendy.subtracker.data.Money
 import ru.mihendy.subtracker.ui.theme.SubTrackerTheme
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -40,14 +42,15 @@ private const val INACTIVE_ALPHA = 0.45f
  * Принимает уже готовые для показа значения, а не модель, — поэтому одна и та же
  * карточка подходит и для превью в форме (черновик), и для будущего списка.
  *
- * @param amount сумма как текст; `null` — суммы пока нет (в форме ещё не введена).
+ * @param price цена; `null` — цены пока нет (в форме сумма или валюта ещё не введены
+ *   или введены неверно). Тогда показывается прочерк — без валюты, ведь валюта
+ *   без суммы ничего не значит.
  * @param color цвет метки (ARGB); `null` — метки нет, полоска не рисуется.
  */
 @Composable
 fun SubscriptionCard(
     name: String,
-    amount: String?,
-    currency: String,
+    price: Money?,
     nextPaymentDate: LocalDate,
     color: Int?,
     isActive: Boolean,
@@ -81,7 +84,8 @@ fun SubscriptionCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${amount ?: stringResource(R.string.card_no_amount)} $currency",
+                    text = price?.let { "${it.amount.toPlainString()} ${it.currency.currencyCode}" }
+                        ?: stringResource(R.string.card_no_amount),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
@@ -106,8 +110,7 @@ private fun ActiveCardPreview() {
     SubTrackerTheme(dynamicColor = false) {
         SubscriptionCard(
             name = "Музыка",
-            amount = "199",
-            currency = "RUB",
+            price = Money(BigDecimal("199"), Money.RUB),
             nextPaymentDate = LocalDate.of(2026, 11, 15),
             color = 0xFF81C784.toInt(),
             isActive = true,
@@ -122,8 +125,7 @@ private fun InactiveCardPreview() {
     SubTrackerTheme(dynamicColor = false) {
         SubscriptionCard(
             name = "Музыка",
-            amount = "199",
-            currency = "RUB",
+            price = Money(BigDecimal("199"), Money.RUB),
             nextPaymentDate = LocalDate.of(2026, 11, 15),
             color = 0xFF81C784.toInt(),
             isActive = false,
