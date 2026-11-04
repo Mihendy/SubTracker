@@ -29,8 +29,18 @@
     <string name="card_next_payment">Списание %1$s</string>
     <string name="card_paused">Приостановлена</string>
     <string name="edit_save">Сохранить</string>
-    <string name="edit_saved">Сохранено</string>
     <string name="edit_save_failed">Не удалось сохранить</string>
+    <string name="edit_delete">Удалить</string>
+    <string name="edit_delete_confirm">Удалить подписку «%1$s»?</string>
+    <string name="edit_delete_failed">Не удалось удалить</string>
+
+    <!-- Список подписок -->
+    <string name="list_title">Подписки</string>
+    <string name="list_empty">Подписок пока нет.\nНажмите «+», чтобы добавить.</string>
+    <string name="list_add">Добавить подписку</string>
+    <string name="list_delete">Удалить</string>
+    <string name="list_deleted">«%1$s» удалена</string>
+    <string name="list_undo">Отменить</string>
 
     <string name="period_weekly">Неделя</string>
     <string name="period_monthly">Месяц</string>

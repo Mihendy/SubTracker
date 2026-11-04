@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +106,7 @@ private val SIDE_BY_SIDE_MIN_WIDTH = 600.dp
  * @param draft что показывать.
  * @param onDraftChange вызывается с новой копией черновика при любом изменении поля.
  * @param onSave нажата «Сохранить»; кнопка доступна, только если черновик валиден.
+ * @param onDelete нажата «Удалить»; `null` — кнопки нет (новая, ещё не сохранённая подписка).
  */
 @Composable
 fun EditSubscriptionScreen(
@@ -112,6 +114,7 @@ fun EditSubscriptionScreen(
     onDraftChange: (SubscriptionDraft) -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
+    onDelete: (() -> Unit)? = null,
 ) {
     // Превью закреплено: прокручивается только форма, а карточка всегда на виду,
     // и видно, как она меняется, даже когда редактируешь поля внизу.
@@ -129,7 +132,7 @@ fun EditSubscriptionScreen(
                 // Нижний отступ шапки не прокручивается, поэтому поля при прокрутке
                 // уходят под карточку не вплотную, а с зазором
                 PreviewHeader(draft = draft, modifier = Modifier.padding(16.dp))
-                ScrollableForm(draft, onDraftChange, onSave, Modifier.weight(1f))
+                ScrollableForm(draft, onDraftChange, onSave, onDelete, Modifier.weight(1f))
             }
         } else {
             Row(modifier = Modifier.fillMaxSize()) {
@@ -144,6 +147,7 @@ fun EditSubscriptionScreen(
                     draft = draft,
                     onDraftChange = onDraftChange,
                     onSave = onSave,
+                    onDelete = onDelete,
                     modifier = Modifier
                         .weight(1f)
                         .padding(top = 16.dp),
@@ -183,6 +187,7 @@ private fun ScrollableForm(
     draft: SubscriptionDraft,
     onDraftChange: (SubscriptionDraft) -> Unit,
     onSave: () -> Unit,
+    onDelete: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -191,7 +196,7 @@ private fun ScrollableForm(
             .verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.TopCenter,
     ) {
-        EditSubscriptionForm(draft, onDraftChange, onSave)
+        EditSubscriptionForm(draft, onDraftChange, onSave, onDelete)
     }
 }
 
@@ -201,6 +206,7 @@ private fun EditSubscriptionForm(
     draft: SubscriptionDraft,
     onDraftChange: (SubscriptionDraft) -> Unit,
     onSave: () -> Unit,
+    onDelete: (() -> Unit)?,
 ) {
     Column(
         modifier = Modifier
@@ -262,6 +268,15 @@ private fun EditSubscriptionForm(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(stringResource(R.string.edit_save))
+        }
+        if (onDelete != null) {
+            TextButton(
+                onClick = onDelete,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.edit_delete))
+            }
         }
     }
 }
@@ -494,7 +509,7 @@ private fun utcMillisToLocalDate(millis: Long): LocalDate =
 
 /**
  * Заметка. Поле растёт по мере ввода текста, но не бывает ниже трёх строк
- * ([minLines]); верхнего предела нет — длинную заметку прокручивает вся форма.
+ * (`minLines`); верхнего предела нет — длинную заметку прокручивает вся форма.
  */
 @Composable
 fun NoteField(
@@ -670,7 +685,7 @@ private fun EmptyPreview() {
 @Composable
 private fun FilledPreview() {
     SubTrackerTheme(dynamicColor = false) {
-        EditSubscriptionScreen(draft = filledDraft, onDraftChange = {}, onSave = {})
+        EditSubscriptionScreen(draft = filledDraft, onDraftChange = {}, onSave = {}, onDelete = {})
     }
 }
 

@@ -143,4 +143,31 @@ class SubscriptionStorageTest {
         assertEquals(0, loaded.load(today))
         assertEquals(listOf(alive), loaded.items)
     }
+
+    @Test
+    fun rollForward_shiftsOnlyPastDates() {
+        val storage = SubscriptionStorage(file())
+        // Ежемесячная, списание было 18 сентября → следующее 18 октября, то есть сегодня
+        val past = sub("Прошла").copy(nextPaymentDate = today.minusMonths(1))
+        val todays = sub("Сегодня").copy(nextPaymentDate = today)
+        val future = sub("Будущая")
+        storage.add(past)
+        storage.add(todays)
+        storage.add(future)
+
+        assertEquals(1, storage.rollForward(today))
+        assertEquals(listOf(today, today, future.nextPaymentDate), storage.items.map { it.nextPaymentDate })
+    }
+
+    @Test
+    fun load_rollsPastDatesForward() {
+        val storage = SubscriptionStorage(file())
+        // Приложение не открывали 3 месяца и 2 дня → ближайшее списание через месяц минус 2 дня
+        storage.add(sub("Музыка").copy(nextPaymentDate = LocalDate.of(2026, 7, 16)))
+        storage.save()
+
+        val loaded = SubscriptionStorage(file())
+        loaded.load(today)
+        assertEquals(LocalDate.of(2026, 11, 16), loaded.items.single().nextPaymentDate)
+    }
 }
