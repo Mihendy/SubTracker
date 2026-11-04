@@ -65,7 +65,7 @@ class SubscriptionStorage(private val file: File) {
     }
 
     /** Удаляет подписку по [uid]. Возвращает `false`, если такой подписки нет. */
-    fun remove(uid: String): Boolean {
+    fun remove(uid: SubscriptionId): Boolean {
         val removed = _items.removeAll { it.uid == uid }
         if (removed) {
             Timber.d("Подписка удалена: uid=%s", uid)

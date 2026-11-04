@@ -1,8 +1,6 @@
 package ru.mihendy.subtracker.data
 
-import android.graphics.Color
 import java.time.LocalDate
-import java.util.UUID
 
 /** Насколько подписка важна для пользователя. */
 enum class Importance {
@@ -28,28 +26,30 @@ enum class BillingPeriod {
  *
  * Неизменяемая модель: все поля `val`, любое изменение через [copy].
  *
- * @property uid уникальный идентификатор, по умолчанию случайный UUID.
+ * @property uid уникальный идентификатор, по умолчанию случайный.
  * @property name название сервиса.
- * @property amount сумма одного списания.
- * @property currency код валюты (ISO 4217), по умолчанию рубли.
+ * @property price сколько списывается за один раз — сумма вместе с валютой, см. [Money].
  * @property period периодичность списаний.
  * @property nextPaymentDate дата ближайшего списания.
  * @property importance важность подписки.
- * @property color цвет карточки в формате ARGB, по умолчанию белый.
+ * @property color цветовая метка в формате ARGB; `null` — метки нет.
+ *   Именно `null`, а не белый по умолчанию: иначе «метки нет» и «выбран белый»
+ *   стали бы неразличимы.
  * @property endDate дата окончания подписки; `null` — бессрочная.
  * @property isActive активна ли подписка (можно приостановить, не удаляя).
+ * @property note заметка в свободной форме; `null` — заметки нет.
  */
 data class Subscription(
-    val uid: String = UUID.randomUUID().toString(),
+    val uid: SubscriptionId = SubscriptionId.random(),
     val name: String,
-    val amount: Double,
-    val currency: String = "RUB",
+    val price: Money,
     val period: BillingPeriod = BillingPeriod.MONTHLY,
     val nextPaymentDate: LocalDate,
     val importance: Importance,
-    val color: Int = Color.WHITE,
+    val color: Int? = null,
     val endDate: LocalDate? = null,
     val isActive: Boolean = true,
+    val note: String? = null,
 ) {
 
     /**
