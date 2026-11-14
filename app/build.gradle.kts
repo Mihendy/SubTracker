@@ -48,6 +48,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.core.splashscreen)
+    // Навигация между экранами внутри одной Activity (NavHost, NavController)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.timber)
     testImplementation(libs.junit)
     // Настоящая org.json для юнит-тестов: в android.jar JSONObject — заглушка
