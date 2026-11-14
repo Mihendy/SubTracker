@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,9 +24,14 @@ import androidx.compose.material3.SwipeToDismissBoxDefaults
 import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -156,6 +162,30 @@ private fun SwipeToDeleteRow(
     val state = remember {
         SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, positionalThreshold)
     }
+    // Смахнули — не удаляем сразу, а спрашиваем: удаление только по кнопке «Удалить»
+    var confirming by remember { mutableStateOf(false) }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            text = { Text(stringResource(R.string.edit_delete_confirm, subscription.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = false
+                    onDelete()
+                }) { Text(stringResource(R.string.edit_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            },
+        )
+    }
+    // Диалог закрыт (отмена или после удаления) — возвращаем карточку на место.
+    // Если удаление не удалось, карточка остаётся в списке, а не «уезжает» за край
+    LaunchedEffect(confirming) {
+        if (!confirming && state.currentValue != SwipeToDismissBoxValue.Settled) state.reset()
+    }
     SwipeToDismissBox(
         state = state,
         backgroundContent = {
@@ -168,7 +198,7 @@ private fun SwipeToDeleteRow(
         modifier = modifier,
         // Только справа налево: свайп вправо ничего не делает
         enableDismissFromStartToEnd = false,
-        onDismiss = { onDelete() },
+        onDismiss = { confirming = true },
     ) {
         SubscriptionCard(
             name = subscription.name,
