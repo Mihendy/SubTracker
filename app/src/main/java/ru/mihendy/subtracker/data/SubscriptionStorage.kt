@@ -25,6 +25,7 @@ import java.time.LocalDate
  *   - повторяющиеся `uid` в файле — остаётся последняя запись (как при [add]);
  *   - после чтения вызывается [purgeExpired], удалённые просроченные подписки
  *     битыми не считаются;
+ *   - затем [rollForward]: прошедшие даты списания сдвигаются на будущее;
  * - [save] при ошибке записи (нет места, нет прав) не бросает исключение,
  *   а логирует его и возвращает `false`.
  *
@@ -88,6 +89,21 @@ class SubscriptionStorage(private val file: File) {
     }
 
     /**
+     * Сдвигает прошедшие даты списания вперёд на целое число периодов, чтобы они
+     * стали не раньше [today] (см. [Subscription.rolledForward]): если приложение
+     * не открывали месяц, ежемесячная подписка покажет следующее списание, а не прошлое.
+     * Возвращает число сдвинутых подписок.
+     */
+    fun rollForward(today: LocalDate = LocalDate.now()): Int {
+        var rolled = 0
+        _items.replaceAll { item ->
+            item.rolledForward(today).also { if (it !== item) rolled++ }
+        }
+        if (rolled > 0) Timber.i("Сдвинуто дат списания: %d", rolled)
+        return rolled
+    }
+
+    /**
      * Записывает все подписки в файл JSON-массивом.
      *
      * @return `true`, если файл записан; `false`, если запись не удалась
@@ -108,9 +124,10 @@ class SubscriptionStorage(private val file: File) {
     }
 
     /**
-     * Загружает подписки из файла, заменяя текущие, и удаляет просроченные.
+     * Загружает подписки из файла, заменяя текущие, удаляет просроченные
+     * и сдвигает прошедшие даты списания.
      *
-     * @param today дата для [purgeExpired]; параметр нужен для тестов.
+     * @param today дата для [purgeExpired] и [rollForward]; параметр нужен для тестов.
      * @return число пропущенных битых записей.
      */
     fun load(today: LocalDate = LocalDate.now()): Int {
@@ -137,6 +154,7 @@ class SubscriptionStorage(private val file: File) {
         }
         if (skipped > 0) Timber.w("Пропущено битых записей: %d", skipped)
         purgeExpired(today)
+        rollForward(today)
         Timber.i("Загружено подписок: %d из %s", _items.size, file.path)
         return skipped
     }
