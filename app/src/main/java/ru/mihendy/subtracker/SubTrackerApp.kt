@@ -1,8 +1,6 @@
 package ru.mihendy.subtracker
 
 import android.app.Application
-import ru.mihendy.subtracker.data.SubscriptionRepository
-import ru.mihendy.subtracker.data.SubscriptionStorage
 import timber.log.Timber
 
 /**
@@ -13,14 +11,13 @@ import timber.log.Timber
  * тега подставляет имя класса, откуда вызван лог. В release-сборке дерево
  * не сажаем, поэтому все вызовы Timber там ничего не делают.
  *
- * Здесь же живёт [repository]: Application существует, пока жив процесс, поэтому
+ * Здесь же живёт [graph]: Application существует, пока жив процесс, поэтому
  * репозиторий один на всё приложение и не пересоздаётся при повороте экрана
  * (Activity при повороте пересоздаётся).
  */
 class SubTrackerApp : Application() {
 
-    /** Хранилище подписок. `lazy` — создаётся при первом обращении, а не при старте. */
-    val repository by lazy { SubscriptionRepository(SubscriptionStorage(this)) }
+    val graph by lazy { SubTrackerGraph(this) }
 
     override fun onCreate() {
         super.onCreate()

@@ -20,11 +20,13 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Репозиторий берём у Application: он один на всё приложение и переживает поворот
-        val repository = (application as SubTrackerApp).repository
+        val graph = (application as SubTrackerApp).graph
         setContent {
             SubTrackerTheme {
-                SubTrackerNavHost(repository = repository)
+                SubTrackerNavHost(
+                    repository = graph.repository,
+                    subscriptionList = graph.subscriptionList,
+                )
             }
         }
     }

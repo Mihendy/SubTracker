@@ -20,7 +20,7 @@ import java.time.LocalDate
  *   не меняется при последующих add/remove;
  * - [load] полностью заменяет содержимое памяти данными из файла:
  *   - файла нет → пустой список, это не ошибка (первый запуск);
- *   - файл не читается или это не JSON-массив → пустой список, возвращается 0;
+ *   - файл не читается или это не JSON-массив → IOException, подписки в памяти сохраняются;
  *   - отдельные битые элементы пропускаются, их число возвращается;
  *   - повторяющиеся `uid` в файле — остаётся последняя запись (как при [add]);
  *   - после чтения вызывается [purgeExpired], удалённые просроченные подписки
@@ -129,24 +129,22 @@ class SubscriptionStorage(private val file: File) {
      *
      * @param today дата для [purgeExpired] и [rollForward]; параметр нужен для тестов.
      * @return число пропущенных битых записей.
+     * @throws IOException если файл не удалось прочитать как JSON-массив.
      */
     fun load(today: LocalDate = LocalDate.now()): Int {
-        _items.clear()
         if (!file.exists()) {
+            _items.clear()
             Timber.i("Файла %s нет — начинаем с пустого списка", file.path)
             return 0
         }
 
         val array = try {
             JSONArray(file.readText())
-        } catch (e: IOException) {
-            Timber.e(e, "Не удалось прочитать %s", file.path)
-            return 0
         } catch (e: JSONException) {
-            Timber.e(e, "В %s не JSON-массив", file.path)
-            return 0
+            throw IOException("В ${file.path} не JSON-массив", e)
         }
 
+        _items.clear()
         var skipped = 0
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i)?.let { Subscription.parse(it) }

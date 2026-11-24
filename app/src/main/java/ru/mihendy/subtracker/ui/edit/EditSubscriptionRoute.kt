@@ -10,6 +10,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,6 +22,8 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import ru.mihendy.subtracker.R
 import ru.mihendy.subtracker.data.Subscription
+import timber.log.Timber
+import java.io.IOException
 import java.time.LocalDate
 
 /**
@@ -54,13 +57,18 @@ fun EditSubscriptionRoute(
     // Открыт ли диалог «Удалить?»; rememberSaveable — чтобы он не пропал при повороте
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
-    // Загружаем хранилище при каждом создании экрана (в том числе после поворота),
-    // но черновик заполняем, только если он не восстановился из rememberSaveable
-    LaunchedEffect(Unit) {
-        val initial = loadInitial()
+    var loadAttempt by rememberSaveable { mutableIntStateOf(0) }
+    var loadFailed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(loadAttempt) {
         if (draft == null) {
-            draft = initial?.let { SubscriptionDraft.from(it) }
-                ?: SubscriptionDraft(nextPaymentDate = LocalDate.now())
+            loadFailed = false
+            try {
+                draft = loadInitial()?.let { SubscriptionDraft.from(it) }
+                    ?: SubscriptionDraft(nextPaymentDate = LocalDate.now())
+            } catch (e: IOException) {
+                Timber.e(e, "Не удалось открыть подписку")
+                loadFailed = true
+            }
         }
     }
 
@@ -70,7 +78,11 @@ fun EditSubscriptionRoute(
 
     if (current == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            if (loadFailed) {
+                TextButton(onClick = { loadAttempt++ }) { Text(stringResource(R.string.list_retry)) }
+            } else {
+                CircularProgressIndicator()
+            }
         }
     } else {
         EditSubscriptionScreen(

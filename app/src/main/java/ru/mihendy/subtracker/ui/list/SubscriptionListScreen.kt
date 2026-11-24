@@ -28,10 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,7 +42,6 @@ import ru.mihendy.subtracker.data.BillingPeriod
 import ru.mihendy.subtracker.data.Importance
 import ru.mihendy.subtracker.data.Money
 import ru.mihendy.subtracker.data.Subscription
-import ru.mihendy.subtracker.data.SubscriptionId
 import ru.mihendy.subtracker.ui.common.SubscriptionCard
 import ru.mihendy.subtracker.ui.theme.SubTrackerTheme
 import java.math.BigDecimal
@@ -61,30 +57,37 @@ import java.util.Currency
 /** Отступ снизу списка, чтобы последнюю карточку не закрывала кнопка «+». */
 private val FAB_CLEARANCE = 88.dp
 
-/**
- * Список подписок с кнопкой «+».
- *
- * @param items подписки; `null` — ещё загружаются (показывается индикатор).
- * @param snackbarHostState где показывать сообщения (например, «удалено, отменить?»).
- * @param onItemClick нажатие на подписку — открыть её на редактирование.
- * @param onAddClick нажатие на «+» — создать новую.
- * @param onDelete подписку смахнули влево.
- */
+/** Рисует список и преобразует жесты в действия. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubscriptionListScreen(
-    items: List<Subscription>?,
+    state: SubscriptionListState,
     snackbarHostState: SnackbarHostState,
-    onItemClick: (SubscriptionId) -> Unit,
-    onAddClick: () -> Unit,
-    onDelete: (Subscription) -> Unit,
+    onAction: (SubscriptionListAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val items = state.items
+    state.confirming?.let { subscription ->
+        AlertDialog(
+            onDismissRequest = { onAction(SubscriptionListAction.CancelDelete) },
+            text = { Text(stringResource(R.string.edit_delete_confirm, subscription.name)) },
+            confirmButton = {
+                TextButton(onClick = { onAction(SubscriptionListAction.ConfirmDelete) }) {
+                    Text(stringResource(R.string.edit_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onAction(SubscriptionListAction.CancelDelete) }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            },
+        )
+    }
     Scaffold(
         modifier = modifier,
         topBar = { TopAppBar(title = { Text(stringResource(R.string.list_title)) }) },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddClick) {
+            FloatingActionButton(onClick = { onAction(SubscriptionListAction.Open(null)) }) {
                 Icon(
                     painter = painterResource(R.drawable.ic_add),
                     contentDescription = stringResource(R.string.list_add),
@@ -97,6 +100,12 @@ fun SubscriptionListScreen(
             .fillMaxSize()
             .padding(innerPadding)
         when {
+            state.loadFailed -> Box(contentModifier, contentAlignment = Alignment.Center) {
+                TextButton(onClick = { onAction(SubscriptionListAction.Reload) }) {
+                    Text(stringResource(R.string.list_retry))
+                }
+            }
+
             items == null -> Box(contentModifier, contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
@@ -109,7 +118,13 @@ fun SubscriptionListScreen(
                 )
             }
 
-            else -> SubscriptionList(items, onItemClick, onDelete, contentModifier)
+            else -> SubscriptionList(
+                items = items,
+                confirming = state.confirming,
+                canDelete = state.mutation == null,
+                onAction = onAction,
+                modifier = contentModifier,
+            )
         }
     }
 }
@@ -118,8 +133,9 @@ fun SubscriptionListScreen(
 @Composable
 private fun SubscriptionList(
     items: List<Subscription>,
-    onItemClick: (SubscriptionId) -> Unit,
-    onDelete: (Subscription) -> Unit,
+    confirming: Subscription?,
+    canDelete: Boolean,
+    onAction: (SubscriptionListAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // remember(items): сортируем заново, только когда пришёл новый список,
@@ -135,8 +151,10 @@ private fun SubscriptionList(
         items(sorted, key = { it.uid.value }) { subscription ->
             SwipeToDeleteRow(
                 subscription = subscription,
-                onClick = { onItemClick(subscription.uid) },
-                onDelete = { onDelete(subscription) },
+                confirming = subscription.uid == confirming?.uid,
+                canDelete = canDelete,
+                onClick = { onAction(SubscriptionListAction.Open(subscription.uid)) },
+                onDismiss = { onAction(SubscriptionListAction.AskToDelete(subscription)) },
                 // Плавно сдвигает соседние карточки, когда одна удаляется или возвращается
                 modifier = Modifier.animateItem(),
             )
@@ -151,8 +169,10 @@ private fun SubscriptionList(
 @Composable
 private fun SwipeToDeleteRow(
     subscription: Subscription,
+    confirming: Boolean,
+    canDelete: Boolean,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Обычный remember, а не rememberSwipeToDismissBoxState(): тот сохраняет состояние
@@ -161,25 +181,6 @@ private fun SwipeToDeleteRow(
     val positionalThreshold = SwipeToDismissBoxDefaults.positionalThreshold
     val state = remember {
         SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, positionalThreshold)
-    }
-    // Смахнули — не удаляем сразу, а спрашиваем: удаление только по кнопке «Удалить»
-    var confirming by remember { mutableStateOf(false) }
-    if (confirming) {
-        AlertDialog(
-            onDismissRequest = { confirming = false },
-            text = { Text(stringResource(R.string.edit_delete_confirm, subscription.name)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirming = false
-                    onDelete()
-                }) { Text(stringResource(R.string.edit_delete)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirming = false }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
-            },
-        )
     }
     // Диалог закрыт (отмена или после удаления) — возвращаем карточку на место.
     // Если удаление не удалось, карточка остаётся в списке, а не «уезжает» за край
@@ -198,7 +199,8 @@ private fun SwipeToDeleteRow(
         modifier = modifier,
         // Только справа налево: свайп вправо ничего не делает
         enableDismissFromStartToEnd = false,
-        onDismiss = { confirming = true },
+        enableDismissFromEndToStart = canDelete,
+        onDismiss = { onDismiss() },
     ) {
         SubscriptionCard(
             name = subscription.name,
@@ -265,11 +267,9 @@ private val previewItems = listOf(
 private fun ListPreview() {
     SubTrackerTheme(dynamicColor = false) {
         SubscriptionListScreen(
-            items = previewItems,
+            state = SubscriptionListState(items = previewItems),
             snackbarHostState = remember { SnackbarHostState() },
-            onItemClick = {},
-            onAddClick = {},
-            onDelete = {},
+            onAction = {},
         )
     }
 }
@@ -279,11 +279,9 @@ private fun ListPreview() {
 private fun EmptyPreview() {
     SubTrackerTheme(dynamicColor = false) {
         SubscriptionListScreen(
-            items = emptyList(),
+            state = SubscriptionListState(items = emptyList()),
             snackbarHostState = remember { SnackbarHostState() },
-            onItemClick = {},
-            onAddClick = {},
-            onDelete = {},
+            onAction = {},
         )
     }
 }
@@ -293,11 +291,9 @@ private fun EmptyPreview() {
 private fun LoadingPreview() {
     SubTrackerTheme(dynamicColor = false) {
         SubscriptionListScreen(
-            items = null,
+            state = SubscriptionListState(items = null),
             snackbarHostState = remember { SnackbarHostState() },
-            onItemClick = {},
-            onAddClick = {},
-            onDelete = {},
+            onAction = {},
         )
     }
 }
