@@ -40,6 +40,7 @@
     <string name="list_add">Добавить подписку</string>
     <string name="list_delete">Удалить</string>
     <string name="list_deleted">«%1$s» удалена</string>
+    <string name="list_retry">Не удалось загрузить подписки. Повторить</string>
     <string name="list_undo">Отменить</string>
 
     <string name="period_weekly">Неделя</string>

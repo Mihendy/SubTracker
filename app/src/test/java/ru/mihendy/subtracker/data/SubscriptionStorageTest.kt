@@ -3,11 +3,13 @@ package ru.mihendy.subtracker.data
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -62,12 +64,13 @@ class SubscriptionStorageTest {
     }
 
     @Test
-    fun load_unreadableFile_givesEmptyList() {
+    fun load_unreadableFile_reportsFailureAndKeepsItems() {
         file().writeText("это не json {")
         val storage = SubscriptionStorage(file())
-        storage.add(sub("старое"))
-        assertEquals(0, storage.load(today))
-        assertTrue(storage.items.isEmpty())
+        val old = sub("старое")
+        storage.add(old)
+        assertThrows(IOException::class.java) { storage.load(today) }
+        assertEquals(listOf(old), storage.items)
     }
 
     @Test

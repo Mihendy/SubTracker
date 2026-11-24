@@ -1,12 +1,12 @@
 package ru.mihendy.subtracker.data
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import java.io.IOException
 import java.time.LocalDate
 
 /**
@@ -20,13 +20,12 @@ import java.time.LocalDate
  * Создаётся один раз на всё приложение (см. SubTrackerApp), поэтому переживает
  * поворот экрана: файл не перечитывается при каждом пересоздании Activity.
  *
- * @param dispatcher поток для работы с файлом. По умолчанию — Dispatchers.IO,
- *   но задачи выполняются строго по одной: [SubscriptionStorage] не потокобезопасен,
+ * @param dispatcher поток для работы с файлом. Должен выполнять задачи строго по одной: [SubscriptionStorage] не потокобезопасен,
  *   а так загрузка, сохранение и удаление никогда не пойдут одновременно.
  */
 class SubscriptionRepository(
     private val storage: SubscriptionStorage,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1),
+    private val dispatcher: CoroutineDispatcher,
 ) {
 
     private val _items = MutableStateFlow<List<Subscription>?>(null)
@@ -52,7 +51,7 @@ class SubscriptionRepository(
      * @return `true`, если файл записан.
      */
     suspend fun save(subscription: Subscription): Boolean = withContext(dispatcher) {
-        loadIfNeeded()
+        if (!canWrite()) return@withContext false
         storage.add(subscription.rolledForward(LocalDate.now()))
         commit().also { ok ->
             if (!ok) Timber.w("Подписку %s сохранить не удалось", subscription.uid)
@@ -64,7 +63,7 @@ class SubscriptionRepository(
      * @return `true`, если подписка была и файл записан.
      */
     suspend fun delete(id: SubscriptionId): Boolean = withContext(dispatcher) {
-        loadIfNeeded()
+        if (!canWrite()) return@withContext false
         storage.remove(id) && commit()
     }
 
@@ -77,6 +76,14 @@ class SubscriptionRepository(
         if (_items.value != null) return
         storage.load()
         _items.value = storage.items
+    }
+
+    private fun canWrite(): Boolean = try {
+        loadIfNeeded()
+        true
+    } catch (e: IOException) {
+        Timber.e(e, "Запись отменена: не удалось прочитать подписки")
+        false
     }
 
     /**

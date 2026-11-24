@@ -54,7 +54,8 @@ val Subscription.json: JSONObject
  *   превратить 10 $ в 10 ₽;
  * - старый формат (сумма и валюта отдельными полями верхнего уровня) тоже читается,
  *   см. [optLegacyPrice];
- * - другое необязательное поле отсутствует или некорректно → значение по умолчанию.
+ * - для отсутствующих необязательных полей используются значения по умолчанию;
+ * - некорректное значение необязательного поля → `null` для всей подписки.
  *
  * `uid` обязателен намеренно: если подставлять новый, одна и та же подписка,
  * пришедшая повторно (например, по сети), получит другой id и задвоится.
@@ -69,12 +70,28 @@ fun Subscription.Companion.parse(json: JSONObject): Subscription? {
     val price = json.optPrice() ?: return null
     val nextPaymentDate = json.optEpochDay(KEY_NEXT_PAYMENT) ?: return null
 
-    val period = json.optEnum(KEY_PERIOD) ?: BillingPeriod.MONTHLY
-    val importance = json.optEnum(KEY_IMPORTANCE) ?: Importance.NORMAL
-    val color = (json.opt(KEY_COLOR) as? Number)?.toInt()
+    val period = json.optEnum<BillingPeriod>(KEY_PERIOD)
+        ?: if (!json.has(KEY_PERIOD)) BillingPeriod.MONTHLY else return null
+    val importance = json.optEnum<Importance>(KEY_IMPORTANCE)
+        ?: if (!json.has(KEY_IMPORTANCE)) Importance.NORMAL else return null
     val endDate = json.optEpochDay(KEY_END_DATE)
-    val isActive = json.opt(KEY_IS_ACTIVE) as? Boolean ?: true
-    val note = (json.opt(KEY_NOTE) as? String)?.takeIf { it.isNotBlank() }
+    if (endDate == null && json.has(KEY_END_DATE)) return null
+
+    val color = when (val raw = json.opt(KEY_COLOR)) {
+        null -> null
+        is Int -> raw
+        else -> return null
+    }
+    val isActive = when (val raw = json.opt(KEY_IS_ACTIVE)) {
+        null -> true
+        is Boolean -> raw
+        else -> return null
+    }
+    val note = when (val raw = json.opt(KEY_NOTE)) {
+        null -> null
+        is String -> raw
+        else -> return null
+    }
 
     return Subscription(
         uid = SubscriptionId(uid),
@@ -86,7 +103,7 @@ fun Subscription.Companion.parse(json: JSONObject): Subscription? {
         color = color,
         endDate = endDate,
         isActive = isActive,
-        note = note,
+        note = note?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -103,7 +120,7 @@ private val Money.json: JSONObject
 private fun JSONObject.optPrice(): Money? {
     if (!has(KEY_PRICE)) return optLegacyPrice()
     val price = opt(KEY_PRICE) as? JSONObject ?: return null
-    val amount = price.optAmount() ?: return null
+    val amount = (price.opt(KEY_AMOUNT) as? String)?.toBigDecimalOrNull() ?: return null
     val currency = (price.opt(KEY_CURRENCY) as? String)?.let(::currencyOrNull) ?: return null
     return Money(amount, currency)
 }
@@ -114,7 +131,7 @@ private fun JSONObject.optPrice(): Money? {
  * означает рубли: так эти файлы и записывались. Неизвестный код валюты → `null`.
  */
 private fun JSONObject.optLegacyPrice(): Money? {
-    val amount = optAmount() ?: return null
+    val amount = optLegacyAmount() ?: return null
     val currency = when (val raw = opt(KEY_CURRENCY)) {
         null -> Money.RUB
         is String -> currencyOrNull(raw)
@@ -127,15 +144,23 @@ private fun JSONObject.optLegacyPrice(): Money? {
  * Читает сумму. Сейчас она пишется строкой («2.99»), но самые старые файлы хранят её
  * числом (199.0) — читаем оба варианта. Нет поля или не число → `null`.
  */
-private fun JSONObject.optAmount(): BigDecimal? = when (val raw = opt(KEY_AMOUNT)) {
-    is String -> raw.toBigDecimalOrNull()
-    is Number -> raw.toString().toBigDecimalOrNull()
-    else -> null
+private fun JSONObject.optLegacyAmount(): BigDecimal? {
+    val raw = opt(KEY_AMOUNT) ?: return null
+    return when (raw) {
+        is String -> raw.toBigDecimalOrNull()
+        is Number -> raw.toString().toBigDecimalOrNull()
+        else -> null
+    }
 }
 
 /** Читает дату, записанную как epochDay. Нет поля, не число или дата вне диапазона → `null`. */
 private fun JSONObject.optEpochDay(key: String): LocalDate? {
-    val epochDay = (opt(key) as? Number)?.toLong() ?: return null
+    val raw = opt(key) ?: return null
+    val epochDay = when (raw) {
+        is Int -> raw.toLong()
+        is Long -> raw
+        else -> return null
+    }
     return try {
         LocalDate.ofEpochDay(epochDay)
     } catch (e: DateTimeException) {

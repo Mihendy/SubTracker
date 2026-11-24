@@ -1,5 +1,6 @@
 package ru.mihendy.subtracker.data
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -20,7 +21,10 @@ class SubscriptionRepositoryTest {
     private fun file(): File = File(tmp.root, "subscriptions.json")
 
     /** Новый репозиторий над тем же файлом — как после перезапуска приложения. */
-    private fun repository() = SubscriptionRepository(SubscriptionStorage(file()))
+    private fun repository() = SubscriptionRepository(
+        SubscriptionStorage(file()),
+        Dispatchers.IO.limitedParallelism(1),
+    )
 
     private fun sub(name: String) = Subscription(
         name = name,
@@ -61,6 +65,16 @@ class SubscriptionRepositoryTest {
         val repository = repository()
         repository.save(b)
         assertEquals(listOf(a, b), repository.items.value)
+    }
+
+    @Test
+    fun save_unreadableFile_doesNotOverwriteIt() = runBlocking {
+        val broken = "{"
+        file().writeText(broken)
+        val repository = repository()
+        assertFalse(repository.save(sub("A")))
+        assertEquals(broken, file().readText())
+        assertNull(repository.items.value)
     }
 
     @Test

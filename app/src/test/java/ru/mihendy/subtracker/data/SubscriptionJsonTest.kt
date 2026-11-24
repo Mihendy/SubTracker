@@ -150,7 +150,6 @@ class SubscriptionJsonTest {
     @Test
     fun parse_blankNote_isNoNote() {
         assertNull(Subscription.parse(minimal.json.put("note", "   "))?.note)
-        assertNull(Subscription.parse(minimal.json.put("note", 42))?.note)
     }
 
     @Test
@@ -159,14 +158,19 @@ class SubscriptionJsonTest {
     }
 
     @Test
-    fun parse_brokenOptionalFields_fallBackToDefaults() {
-        val json = minimal.json
-            .put("importance", "SUPER")
-            .put("period", 7)
-            .put("color", "red")
-            .put("isActive", "yes")
-        val parsed = Subscription.parse(json)
-        assertEquals(minimal, parsed)
+    fun parse_brokenOptionalFields_rejectSubscription() {
+        val invalidFields = mapOf(
+            "importance" to "SUPER",
+            "period" to 7,
+            "color" to 1.5,
+            "isActive" to "yes",
+            "endDate" to 0.5,
+            "note" to JSONObject.NULL,
+        )
+        for ((field, value) in invalidFields) {
+            assertNull(field, Subscription.parse(minimal.json.put(field, value)))
+        }
+        assertNull(Subscription.parse(minimal.json.put("note", 42)))
     }
 
     @Test

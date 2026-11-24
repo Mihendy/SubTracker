@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -20,6 +17,7 @@ import ru.mihendy.subtracker.data.SubscriptionId
 import ru.mihendy.subtracker.data.SubscriptionRepository
 import ru.mihendy.subtracker.ui.edit.EditSubscriptionRoute
 import ru.mihendy.subtracker.ui.list.SubscriptionListRoute
+import ru.mihendy.subtracker.ui.list.SubscriptionListStore
 
 /**
  * Маршруты приложения — строки, по которым NavHost находит экран.
@@ -53,6 +51,7 @@ private object Routes {
 @Composable
 fun SubTrackerNavHost(
     repository: SubscriptionRepository,
+    subscriptionList: SubscriptionListStore,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
@@ -62,16 +61,9 @@ fun SubTrackerNavHost(
         modifier = modifier,
     ) {
         composable(Routes.LIST) {
-            // collectAsState: при каждом новом списке в репозитории экран перерисуется
-            val items by repository.items.collectAsState()
-            LaunchedEffect(Unit) { repository.load() }
-
             SubscriptionListRoute(
-                items = items,
-                delete = repository::delete,
-                restore = repository::save,
+                store = subscriptionList,
                 onOpen = { id -> navController.openEditor(id) },
-                onAdd = { navController.openEditor(null) },
             )
         }
 
